@@ -206,7 +206,17 @@
             <option value="A m^2">A·m²</option>
           </select>
         </div>
+        <div class="field-wrap">
+          <label for="timeColumn">Time column (optional)</label>
+          <select id="timeColumn"></select>
+        </div>
+        <div class="field-wrap">
+          <label for="driftThreshold">Drift threshold fraction</label>
+          <input type="number" id="driftThreshold" step="any" min="0" max="1" value="0.95">
+        </div>
       </div>
+
+      <label class="checkline"><input type="checkbox" id="applyDriftCorrection"> Apply drift correction from high-field data</label>
 
       <div class="pill-row" id="autoDetectRow"></div>
 
@@ -313,6 +323,13 @@
 
       <label class="checkline"><input type="checkbox" id="useSubtractedForNorm" checked> Use background-subtracted moment for normalization outputs</label>
 
+      <div class="form-grid" style="margin-top:14px;">
+        <div class="field-wrap">
+          <label for="satFraction">Saturation threshold fraction</label>
+          <input type="number" id="satFraction" step="any" min="0" max="1" value="0.98">
+        </div>
+      </div>
+
       <div class="btn-row" style="margin-top:16px;">
         <button class="btn-primary" onclick="updateNormalization()">Update normalization</button>
       </div>
@@ -333,7 +350,7 @@
   <div class="tab-panel" id="tab5">
     <div class="smg-card">
       <div class="smg-card-title">Export Processed Data</div>
-      <p class="smg-card-desc">The export contains raw field and moment, fitted background, subtracted moment, and normalized quantities in both cgs/emu and SI units whenever geometry has been supplied.</p>
+      <p class="smg-card-desc">The export contains raw and corrected magnetic data, normalized magnetization, interpolated loop metrics, and geometry-derived quantities in both cgs/emu and SI units whenever geometry has been supplied.</p>
 
       <div id="exportSummaryBlock"></div>
 
@@ -350,7 +367,8 @@
 
     <div class="smg-card">
       <div class="smg-card-title" style="font-size:1.05rem;">Included output columns</div>
-      <div class="smg-kv"><span class="smg-kv-key">Always included</span><span class="smg-kv-val">field, raw moment, fitted background, background-subtracted moment</span></div>
+      <div class="smg-kv"><span class="smg-kv-key">Always included</span><span class="smg-kv-val">field, raw moment, drift-corrected moment, fitted background, background-subtracted moment, normalized magnetization</span></div>
+      <div class="smg-kv"><span class="smg-kv-key">Magnetic metrics</span><span class="smg-kv-val">Hc±, Hsat±, Mr±, Mr/Ms, and Msat±</span></div>
       <div class="smg-kv"><span class="smg-kv-key">If area entered</span><span class="smg-kv-val">moment/area in emu/cm² and A</span></div>
       <div class="smg-kv"><span class="smg-kv-key">If area and thickness entered</span><span class="smg-kv-val">magnetization in emu/cm³ and A/m</span></div>
       <div class="smg-kv"><span class="smg-kv-key">Unit handling</span><span class="smg-kv-val">SI and emu/cgs columns are both written side-by-side</span></div>
@@ -373,10 +391,13 @@ let state = {
   numericData:[],
   fieldIndex:0,
   momentIndex:1,
+  timeIndex:-1,
   fieldUnit:'Oe',
   momentUnit:'emu',
   fit: null,
-  normalization: null
+  drift: null,
+  normalization: null,
+  metrics: null
 };
 
 const dropzone = document.getElementById('dropzone');
@@ -492,8 +513,10 @@ function guessDefaultColumnsAndUnits() {
   const names = state.columns.map(c => c.toLowerCase());
   const fieldCandidates = ['magnetic field', 'field', 'applied field', 'h'];
   const momentCandidates = ['moment', 'moment (emu)', 'long moment', 'dc moment', 'magnetization'];
+  const timeCandidates = ['time', 'timestamp', 'elapsed'];
   state.fieldIndex = findBestColumn(names, fieldCandidates, 0);
   state.momentIndex = findBestColumn(names, momentCandidates, Math.min(1, state.columns.length - 1));
+  state.timeIndex = findBestColumn(names, timeCandidates, -1);
 
   const fieldName = state.columns[state.fieldIndex]?.toLowerCase() || '';
   const momentName = state.columns[state.momentIndex]?.toLowerCase() || '';
@@ -508,7 +531,7 @@ function findBestColumn(names, candidates, fallback) {
     candidates.forEach(term => { if (name.includes(term)) score += term.length; });
     if (score > bestScore) { bestScore = score; best = idx; }
   });
-  return best;
+  return bestScore > 0 ? best : fallback;
 }
 function renderFileInfo(file) {
   document.getElementById('fileInfoSection').classList.remove('hidden');
@@ -529,7 +552,7 @@ function showParseError(msg) {
   el.classList.remove('hidden');
 }
 function resetTool() {
-  state = { fileName:'', baseName:'', columns:[], rawRows:[], numericData:[], fieldIndex:0, momentIndex:1, fieldUnit:'Oe', momentUnit:'emu', fit:null, normalization:null };
+  state = { fileName:'', baseName:'', columns:[], rawRows:[], numericData:[], fieldIndex:0, momentIndex:1, timeIndex:-1, fieldUnit:'Oe', momentUnit:'emu', fit:null, drift:null, normalization:null, metrics:null };
   document.getElementById('fileInfoSection').classList.add('hidden');
   document.getElementById('parseError').classList.add('hidden');
   document.getElementById('fileInput').value = '';
@@ -542,34 +565,49 @@ function resetTool() {
   document.getElementById('tab1').classList.add('active');
 }
 
+
 function renderColumnOptions() {
   const fieldSel = document.getElementById('fieldColumn');
   const momentSel = document.getElementById('momentColumn');
+  const timeSel = document.getElementById('timeColumn');
   fieldSel.innerHTML = '';
   momentSel.innerHTML = '';
+  timeSel.innerHTML = '<option value="-1">(none)</option>';
   state.columns.forEach((col, i) => {
+    const label = col || `Column ${i+1}`;
     const opt1 = document.createElement('option');
-    opt1.value = i; opt1.textContent = col || `Column ${i+1}`;
+    opt1.value = i; opt1.textContent = label;
     if (i === state.fieldIndex) opt1.selected = true;
     fieldSel.appendChild(opt1);
+
     const opt2 = document.createElement('option');
-    opt2.value = i; opt2.textContent = col || `Column ${i+1}`;
+    opt2.value = i; opt2.textContent = label;
     if (i === state.momentIndex) opt2.selected = true;
     momentSel.appendChild(opt2);
+
+    const opt3 = document.createElement('option');
+    opt3.value = i; opt3.textContent = label;
+    if (i === state.timeIndex) opt3.selected = true;
+    timeSel.appendChild(opt3);
   });
   document.getElementById('fieldUnit').value = state.fieldUnit;
   document.getElementById('momentUnit').value = state.momentUnit;
+  if (state.timeIndex < 0) timeSel.value = '-1';
   fieldSel.onchange = () => { state.fieldIndex = parseInt(fieldSel.value); rebuildNumericData(); seedFitWindows(); renderPreview(); updatePlot(); };
   momentSel.onchange = () => { state.momentIndex = parseInt(momentSel.value); rebuildNumericData(); renderPreview(); updatePlot(); };
+  timeSel.onchange = () => { state.timeIndex = parseInt(timeSel.value); rebuildNumericData(); renderPreview(); updatePlot(); };
   document.getElementById('fieldUnit').onchange = () => { state.fieldUnit = document.getElementById('fieldUnit').value; updatePlot(); renderExportSummary(); };
   document.getElementById('momentUnit').onchange = () => { state.momentUnit = document.getElementById('momentUnit').value; renderExportSummary(); renderNormSummary(); };
   const pills = document.getElementById('autoDetectRow');
   pills.innerHTML = `
     <span class="pill">Auto-detected field: ${esc(state.columns[state.fieldIndex] || '—')}</span>
     <span class="pill">Auto-detected moment: ${esc(state.columns[state.momentIndex] || '—')}</span>
+    <span class="pill">Time column: ${state.timeIndex >= 0 ? esc(state.columns[state.timeIndex]) : 'not selected'}</span>
   `;
   renderPreview();
 }
+
+
 
 function rebuildNumericData() {
   state.numericData = [];
@@ -577,20 +615,28 @@ function rebuildNumericData() {
     const row = state.rawRows[i];
     const x = parseFloat((row[state.fieldIndex] ?? '').trim());
     const y = parseFloat((row[state.momentIndex] ?? '').trim());
-    if (Number.isFinite(x) && Number.isFinite(y)) state.numericData.push({x, y, rowIndex:i});
+    const t = state.timeIndex >= 0 ? parseFloat((row[state.timeIndex] ?? '').trim()) : NaN;
+    if (Number.isFinite(x) && Number.isFinite(y)) state.numericData.push({x, y, t, rowIndex:i});
   }
   state.fit = null;
+  state.drift = null;
+  state.metrics = null;
   updateNormalization();
 }
+
+
 function renderPreview() {
+  const thead = document.querySelector('#previewTable thead tr');
   const tbody = document.querySelector('#previewTable tbody');
+  thead.innerHTML = `<th>Field</th><th>Moment</th>${state.timeIndex >= 0 ? '<th>Time</th>' : ''}`;
   tbody.innerHTML = '';
   state.numericData.slice(0, 10).forEach(pt => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${fmt(pt.x)}</td><td>${fmt(pt.y)}</td>`;
+    tr.innerHTML = `<td>${fmt(pt.x)}</td><td>${fmt(pt.y)}</td>${state.timeIndex >= 0 ? `<td>${Number.isFinite(pt.t) ? fmt(pt.t) : '—'}</td>` : ''}`;
     tbody.appendChild(tr);
   });
 }
+
 
 function seedFitWindows() {
   if (!state.numericData.length) return;
@@ -610,6 +656,7 @@ function getFitWindows() {
     rightMax: parseFloat(document.getElementById('rightMax').value),
   };
 }
+
 function applyBackgroundFit() {
   if (state.numericData.length < 3) return;
   const w = getFitWindows();
@@ -617,10 +664,11 @@ function applyBackgroundFit() {
     alert('Please enter all four field limits.'); return;
   }
 
-  const leftPoints = state.numericData.filter(p =>
+  const analysisData = getAnalysisData();
+  const leftPoints = analysisData.filter(p =>
     p.x >= Math.min(w.leftMin, w.leftMax) && p.x <= Math.max(w.leftMin, w.leftMax)
   );
-  const rightPoints = state.numericData.filter(p =>
+  const rightPoints = analysisData.filter(p =>
     p.x >= Math.min(w.rightMin, w.rightMax) && p.x <= Math.max(w.rightMin, w.rightMax)
   );
 
@@ -628,8 +676,8 @@ function applyBackgroundFit() {
     alert('Each fit window must contain at least two points.'); return;
   }
 
-  const leftFit = linearFit(leftPoints.map(p => p.x), leftPoints.map(p => p.y));
-  const rightFit = linearFit(rightPoints.map(p => p.x), rightPoints.map(p => p.y));
+  const leftFit = linearFit(leftPoints.map(p => p.x), leftPoints.map(p => p.yWork));
+  const rightFit = linearFit(rightPoints.map(p => p.x), rightPoints.map(p => p.yWork));
   const avgSlope = 0.5 * (leftFit.slope + rightFit.slope);
 
   state.fit = {
@@ -638,23 +686,42 @@ function applyBackgroundFit() {
     selectedCount: leftPoints.length + rightPoints.length,
     slope: avgSlope,
     intercept: 0,
-    left: {
-      ...leftFit,
-      count: leftPoints.length,
-    },
-    right: {
-      ...rightFit,
-      count: rightPoints.length,
-    },
-    derived: state.numericData.map(p => {
+    left: { ...leftFit, count: leftPoints.length },
+    right: { ...rightFit, count: rightPoints.length },
+    derived: analysisData.map(p => {
       const bg = avgSlope * p.x;
-      return {x:p.x, y:p.y, bg, ySub:p.y - bg, rowIndex:p.rowIndex};
+      return {...p, bg, ySub:p.yWork - bg};
     })
   };
+  state.metrics = computeLoopMetrics();
   updatePlot();
   renderFitSummary();
   updateNormalization();
 }
+
+function getAnalysisData() {
+  const applyDrift = document.getElementById('applyDriftCorrection')?.checked;
+  const threshold = parseFloat(document.getElementById('driftThreshold')?.value);
+  let drift = {enabled:false, threshold, slope:0, intercept:0, count:0, r2:null};
+
+  if (applyDrift && state.timeIndex >= 0) {
+    const withTime = state.numericData.filter(p => Number.isFinite(p.t));
+    if (withTime.length >= 2 && Number.isFinite(threshold)) {
+      const hmax = Math.max(...withTime.map(p => Math.abs(p.x)));
+      const driftPts = withTime.filter(p => Math.abs(p.x) >= threshold * hmax);
+      if (driftPts.length >= 2) {
+        const fit = linearFit(driftPts.map(p => p.t), driftPts.map(p => p.y));
+        drift = {enabled:true, threshold, slope:fit.slope, intercept:fit.intercept, count:driftPts.length, r2:fit.r2};
+      }
+    }
+  }
+  state.drift = drift;
+  return state.numericData.map(p => {
+    const driftVal = (drift.enabled && Number.isFinite(p.t)) ? (drift.slope * p.t + drift.intercept) : 0;
+    return {...p, yRaw:p.y, driftComponent:driftVal, yDrift:p.y - driftVal, yWork:p.y - driftVal};
+  });
+}
+
 function linearFit(xs, ys) {
   const n = xs.length;
   let sx = 0, sy = 0, sxx = 0, sxy = 0;
@@ -677,6 +744,116 @@ function linearFit(xs, ys) {
 }
 function mean(arr) { return arr.reduce((a,b)=>a+b,0) / arr.length; }
 
+function computeLoopMetrics() {
+  if (!state.fit || !state.fit.derived?.length) return null;
+  const data = state.fit.derived;
+  const windows = state.fit.windows;
+  const satInput = parseFloat(document.getElementById('satFraction')?.value);
+  const satFraction = Number.isFinite(satInput) && satInput > 0 && satInput <= 1 ? satInput : 0.98;
+
+  const leftPts = data.filter(p => p.x >= Math.min(windows.leftMin, windows.leftMax) && p.x <= Math.max(windows.leftMin, windows.leftMax));
+  const rightPts = data.filter(p => p.x >= Math.min(windows.rightMin, windows.rightMax) && p.x <= Math.max(windows.rightMin, windows.rightMax));
+  const MsatMinus = leftPts.length ? mean(leftPts.map(p => p.ySub)) : null;
+  const MsatPlus = rightPts.length ? mean(rightPts.map(p => p.ySub)) : null;
+  const normDenominator = Math.max(Math.abs(MsatMinus || 0), Math.abs(MsatPlus || 0)) || null;
+
+  const branches = splitBranches(data);
+  const descending = branches.descending;
+  const ascending = branches.ascending;
+
+  const MrPlus = descending ? interpolateYAtX(descending, 0, 'ySub') : null;
+  const MrMinus = ascending ? interpolateYAtX(ascending, 0, 'ySub') : null;
+  const HcMinus = descending ? interpolateXAtY(descending, 0, 'ySub') : null;
+  const HcPlus = ascending ? interpolateXAtY(ascending, 0, 'ySub') : null;
+  const HsatMinus = (descending && Number.isFinite(MsatMinus)) ? firstFieldReachingThreshold(descending, satFraction * Math.abs(MsatMinus), -1) : null;
+  const HsatPlus = (ascending && Number.isFinite(MsatPlus)) ? firstFieldReachingThreshold(ascending, satFraction * Math.abs(MsatPlus), +1) : null;
+
+  return {
+    satFraction,
+    MsatMinus, MsatPlus,
+    MrMinus, MrPlus,
+    HcMinus, HcPlus,
+    HsatMinus, HsatPlus,
+    remFracMinus: (Number.isFinite(MrMinus) && Number.isFinite(MsatMinus) && MsatMinus !== 0) ? MrMinus / MsatMinus : null,
+    remFracPlus: (Number.isFinite(MrPlus) && Number.isFinite(MsatPlus) && MsatPlus !== 0) ? MrPlus / MsatPlus : null,
+    normDenominator
+  };
+}
+
+function splitBranches(data) {
+  if (data.length < 4) return {descending:null, ascending:null};
+  const segs = [];
+  let start = 0;
+  let prevSign = 0;
+  for (let i = 1; i < data.length; i++) {
+    const dx = data[i].x - data[i-1].x;
+    const s = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+    if (s === 0) continue;
+    if (prevSign === 0) { prevSign = s; continue; }
+    if (s !== prevSign) {
+      segs.push({start, end:i-1, sign:prevSign, len:i-start});
+      start = i-1;
+      prevSign = s;
+    }
+  }
+  if (prevSign !== 0) segs.push({start, end:data.length-1, sign:prevSign, len:data.length-start});
+  let descSeg = null, ascSeg = null;
+  segs.forEach(seg => {
+    if (seg.len < 3) return;
+    if (seg.sign < 0 && (!descSeg || seg.len > descSeg.len)) descSeg = seg;
+    if (seg.sign > 0 && (!ascSeg || seg.len > ascSeg.len)) ascSeg = seg;
+  });
+  return {
+    descending: descSeg ? data.slice(descSeg.start, descSeg.end + 1) : null,
+    ascending: ascSeg ? data.slice(ascSeg.start, ascSeg.end + 1) : null
+  };
+}
+
+function interpolateYAtX(points, x0, key='ySub') {
+  for (let i = 1; i < points.length; i++) {
+    const x1 = points[i-1].x, x2 = points[i].x;
+    if ((x1 <= x0 && x0 <= x2) || (x2 <= x0 && x0 <= x1)) {
+      if (x2 === x1) return 0.5 * (points[i-1][key] + points[i][key]);
+      const f = (x0 - x1) / (x2 - x1);
+      return points[i-1][key] + f * (points[i][key] - points[i-1][key]);
+    }
+  }
+  return null;
+}
+
+function interpolateXAtY(points, y0, key='ySub') {
+  for (let i = 1; i < points.length; i++) {
+    const y1 = points[i-1][key], y2 = points[i][key];
+    if ((y1 <= y0 && y0 <= y2) || (y2 <= y0 && y0 <= y1)) {
+      if (y2 === y1) return 0.5 * (points[i-1].x + points[i].x);
+      const f = (y0 - y1) / (y2 - y1);
+      return points[i-1].x + f * (points[i].x - points[i-1].x);
+    }
+  }
+  return null;
+}
+
+function firstFieldReachingThreshold(points, thresholdAbs, signWanted) {
+  const filtered = points
+    .filter(p => signWanted > 0 ? p.x >= 0 : p.x <= 0)
+    .slice()
+    .sort((a,b) => Math.abs(a.x) - Math.abs(b.x));
+  if (filtered.length < 2) return null;
+  for (let i = 1; i < filtered.length; i++) {
+    const p1 = filtered[i-1], p2 = filtered[i];
+    const m1 = signWanted * p1.ySub;
+    const m2 = signWanted * p2.ySub;
+    if ((m1 <= thresholdAbs && thresholdAbs <= m2) || (m2 <= thresholdAbs && thresholdAbs <= m1)) {
+      if (m2 === m1) return 0.5 * (p1.x + p2.x);
+      const f = (thresholdAbs - m1) / (m2 - m1);
+      return p1.x + f * (p2.x - p1.x);
+    }
+  }
+  return null;
+}
+
+
+
 function renderFitSummary() {
   const card = document.getElementById('fitSummary');
   if (!state.fit) {
@@ -685,20 +862,26 @@ function renderFitSummary() {
     return;
   }
   const f = state.fit;
+  const d = state.drift || {enabled:false};
+  const m = state.metrics;
   card.innerHTML = `
     <div class="smg-result-label">Background fit summary</div>
-    <div class="smg-kv"><span class="smg-kv-key">Baseline model</span><span class="smg-kv-val">Two side fits → averaged slope → branchwise intercepts</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Baseline model</span><span class="smg-kv-val">Two side fits → averaged slope only → moment − field × slope</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Drift correction</span><span class="smg-kv-val">${d.enabled ? `Enabled (${d.count} points, threshold ${fmt(d.threshold,4)})` : 'Off'}</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Shared slope a</span><span class="smg-kv-val">${fmt(f.slope, 8)}</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Left fit slope</span><span class="smg-kv-val">${fmt(f.left.slope, 8)}</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Right fit slope</span><span class="smg-kv-val">${fmt(f.right.slope, 8)}</span></div>
-    <div class="smg-kv"><span class="smg-kv-key">Left intercept (shared slope)</span><span class="smg-kv-val">${fmt(f.left.interceptSharedSlope, 8)} ${esc(state.momentUnit)}</span></div>
-    <div class="smg-kv"><span class="smg-kv-key">Right intercept (shared slope)</span><span class="smg-kv-val">${fmt(f.right.interceptSharedSlope, 8)} ${esc(state.momentUnit)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Left intercept (diagnostic)</span><span class="smg-kv-val">${fmt(f.left.intercept, 8)} ${esc(state.momentUnit)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Right intercept (diagnostic)</span><span class="smg-kv-val">${fmt(f.right.intercept, 8)} ${esc(state.momentUnit)}</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Left R²</span><span class="smg-kv-val">${fmt(f.left.r2, 6)}</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Right R²</span><span class="smg-kv-val">${fmt(f.right.r2, 6)}</span></div>
-    <div class="smg-kv"><span class="smg-kv-key">Branch boundary</span><span class="smg-kv-val">${fmt(f.branchBoundary, 8)} ${esc(state.fieldUnit)}</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Points used</span><span class="smg-kv-val">${f.selectedCount} (${f.left.count} left, ${f.right.count} right)</span></div>
+    ${m ? `<div class="smg-kv"><span class="smg-kv-key">Msat− / Msat+</span><span class="smg-kv-val">${fmt(m.MsatMinus,8)} / ${fmt(m.MsatPlus,8)} ${esc(state.momentUnit)}</span></div>` : ''}
+    ${m ? `<div class="smg-kv"><span class="smg-kv-key">Hc− / Hc+</span><span class="smg-kv-val">${fmt(m.HcMinus,8)} / ${fmt(m.HcPlus,8)} ${esc(state.fieldUnit)}</span></div>` : ''}
+    ${m ? `<div class="smg-kv"><span class="smg-kv-key">Hsat− / Hsat+</span><span class="smg-kv-val">${fmt(m.HsatMinus,8)} / ${fmt(m.HsatPlus,8)} ${esc(state.fieldUnit)} at ${fmt(m.satFraction,4)} Msat</span></div>` : ''}
   `;
 }
+
 
 function updatePlot() {
   const canvas = document.getElementById('analysisPlot');
@@ -803,12 +986,14 @@ function legendItem(ctx, x, y, color, text, dash=[]) {
   ctx.fillStyle = '#7a5a5c'; ctx.font = '12px "IBM Plex Sans", sans-serif'; ctx.fillText(text, x+28, y+4);
 }
 
+
 function updateNormalization() {
   const areaVal = parseFloat(document.getElementById('areaValue').value);
   const areaUnit = document.getElementById('areaUnit').value;
   const tVal = parseFloat(document.getElementById('thicknessValue').value);
   const tUnit = document.getElementById('thicknessUnit').value;
   const useSub = document.getElementById('useSubtractedForNorm').checked;
+  const satVal = parseFloat(document.getElementById('satFraction').value);
 
   state.normalization = {
     areaInput: areaVal,
@@ -816,19 +1001,25 @@ function updateNormalization() {
     thicknessInput: tVal,
     thicknessUnit: tUnit,
     useSubtracted: useSub,
+    satFraction: Number.isFinite(satVal) && satVal > 0 && satVal <= 1 ? satVal : 0.98,
     area_m2: Number.isFinite(areaVal) && areaVal > 0 ? convertAreaToM2(areaVal, areaUnit) : null,
     area_cm2: Number.isFinite(areaVal) && areaVal > 0 ? convertAreaToCm2(areaVal, areaUnit) : null,
     thickness_m: Number.isFinite(tVal) && tVal > 0 ? convertThicknessToM(tVal, tUnit) : null,
   };
+  if (state.fit) state.metrics = computeLoopMetrics();
   renderNormSummary();
   renderExportSummary();
 }
+
+
 function renderNormSummary() {
   const card = document.getElementById('normSummary');
-  const n = state.normalization;
-  if (!n || !n.area_m2) {
+  const n = state.normalization || {};
+  const m = state.metrics;
+  if (!n.area_m2) {
     card.innerHTML = `<div class="smg-result-label">Normalization summary</div>
-      <div class="smg-kv"><span class="smg-kv-key">Status</span><span class="smg-kv-val">Area not yet entered</span></div>`;
+      <div class="smg-kv"><span class="smg-kv-key">Status</span><span class="smg-kv-val">Area not yet entered</span></div>
+      ${m ? `<div class="smg-kv"><span class="smg-kv-key">Metrics</span><span class="smg-kv-val">Magnetic metrics are still available from the corrected loop</span></div>` : ''}`;
     return;
   }
   const vol_m3 = n.thickness_m ? n.area_m2 * n.thickness_m : null;
@@ -836,11 +1027,14 @@ function renderNormSummary() {
     <div class="smg-result-label">Normalization summary</div>
     <div class="smg-kv"><span class="smg-kv-key">Area</span><span class="smg-kv-val">${fmt(n.areaInput)} ${esc(n.areaUnit)} = ${fmt(n.area_cm2)} cm² = ${fmt(n.area_m2)} m²</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Moment basis</span><span class="smg-kv-val">${n.useSubtracted ? 'Background-subtracted moment' : 'Raw moment'}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Saturation threshold</span><span class="smg-kv-val">${fmt(n.satFraction,4)} of Msat</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Areal output</span><span class="smg-kv-val">emu/cm² and A</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Volumetric output</span><span class="smg-kv-val">${vol_m3 ? 'emu/cm³ and A/m' : 'Thickness not entered'}</span></div>
     ${vol_m3 ? `<div class="smg-kv"><span class="smg-kv-key">Volume</span><span class="smg-kv-val">${fmt(vol_m3)} m³</span></div>` : ''}
+    ${m ? `<div class="smg-kv"><span class="smg-kv-key">Remanent fraction − / +</span><span class="smg-kv-val">${fmt(m.remFracMinus,6)} / ${fmt(m.remFracPlus,6)}</span></div>` : ''}
   `;
 }
+
 function convertAreaToM2(v, unit) {
   if (unit === 'cm2') return v * 1e-4;
   if (unit === 'mm2') return v * 1e-6;
@@ -858,11 +1052,14 @@ function convertThicknessToM(v, unit) {
   return v;
 }
 
+
 function renderExportSummary() {
   const outName = state.baseName ? state.baseName + '_magnetic_analysis.csv' : 'processed_magnetic_analysis.csv';
-  const n = state.normalization;
+  const n = state.normalization || {};
   const fitStatus = state.fit ? 'Linear background fit ready' : 'No background fit yet';
+  const driftStatus = state.drift?.enabled ? `Enabled using |H| ≥ ${fmt(state.drift.threshold,4)} Hmax` : 'Off';
   const normStatus = (n && n.area_m2) ? (n.thickness_m ? 'Areal + volumetric outputs ready' : 'Areal outputs ready; thickness missing for volumetric outputs') : 'Geometry not yet entered';
+  const metricsStatus = state.metrics ? 'Interpolated loop metrics ready' : 'Loop metrics not yet available';
   document.getElementById('exportSummaryBlock').innerHTML = `
     <div class="smg-result-card">
       <div class="smg-result-label">Output filename</div>
@@ -870,11 +1067,14 @@ function renderExportSummary() {
     </div>
     <div class="smg-kv"><span class="smg-kv-key">Field column</span><span class="smg-kv-val">${esc(state.columns[state.fieldIndex] || '—')} (${esc(state.fieldUnit)})</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Moment column</span><span class="smg-kv-val">${esc(state.columns[state.momentIndex] || '—')} (${esc(state.momentUnit)})</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Drift correction</span><span class="smg-kv-val">${driftStatus}</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Background subtraction</span><span class="smg-kv-val">${fitStatus}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Loop metrics</span><span class="smg-kv-val">${metricsStatus}</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Normalization</span><span class="smg-kv-val">${normStatus}</span></div>
     <div class="smg-kv"><span class="smg-kv-key">Rows exported</span><span class="smg-kv-val">${state.numericData.length.toLocaleString()}</span></div>
   `;
 }
+
 
 function exportProcessedCSV() {
   if (!state.numericData.length) return;
@@ -893,49 +1093,76 @@ function exportProcessedCSV() {
   document.getElementById('exportSuccess').style.display = 'flex';
 }
 
+
 function getProcessedRows() {
-  const fitDerived = state.fit ? state.fit.derived : state.numericData.map(p => ({...p, bg:0, ySub:p.y}));
+  const derived = state.fit ? state.fit.derived : getAnalysisData().map(p => ({...p, bg:0, ySub:p.yWork}));
   const n = state.normalization || {};
   const area_cm2 = n.area_cm2 || null;
   const area_m2 = n.area_m2 || null;
   const thickness_m = n.thickness_m || null;
   const volume_m3 = (area_m2 && thickness_m) ? area_m2 * thickness_m : null;
-  return fitDerived.map(p => {
+  const metrics = state.metrics || {};
+  const normDen = metrics.normDenominator || null;
+
+  return derived.map(p => {
     const fieldOe = convertField(p.x, state.fieldUnit, 'Oe');
     const fieldT = convertField(p.x, state.fieldUnit, 'T');
     const fieldAm = convertField(p.x, state.fieldUnit, 'A/m');
-    const rawEmu = convertMoment(p.y, state.momentUnit, 'emu');
-    const rawSI = convertMoment(p.y, state.momentUnit, 'A m^2');
+    const rawEmu = convertMoment(p.yRaw ?? p.y, state.momentUnit, 'emu');
+    const rawSI = convertMoment(p.yRaw ?? p.y, state.momentUnit, 'A m^2');
+    const driftEmu = convertMoment(p.yDrift ?? p.y, state.momentUnit, 'emu');
+    const driftSI = convertMoment(p.yDrift ?? p.y, state.momentUnit, 'A m^2');
     const bgEmu = convertMoment(p.bg, state.momentUnit, 'emu');
     const bgSI = convertMoment(p.bg, state.momentUnit, 'A m^2');
     const subEmu = convertMoment(p.ySub, state.momentUnit, 'emu');
     const subSI = convertMoment(p.ySub, state.momentUnit, 'A m^2');
-    const normEmu = (n.useSubtracted ? subEmu : rawEmu);
-    const normSI = (n.useSubtracted ? subSI : rawSI);
+    const basisEmu = (n.useSubtracted ? subEmu : rawEmu);
+    const basisSI = (n.useSubtracted ? subSI : rawSI);
 
     const row = {
+      row_index: p.rowIndex,
       field_input: p.x,
       field_Oe: fieldOe,
       field_T: fieldT,
       field_A_per_m: fieldAm,
+      time_input: Number.isFinite(p.t) ? p.t : '',
       moment_raw_emu: rawEmu,
       moment_raw_A_m2: rawSI,
+      moment_drift_corrected_emu: driftEmu,
+      moment_drift_corrected_A_m2: driftSI,
       background_fit_emu: bgEmu,
       background_fit_A_m2: bgSI,
       moment_subtracted_emu: subEmu,
-      moment_subtracted_A_m2: subSI
+      moment_subtracted_A_m2: subSI,
+      normalized_magnetization: normDen ? (subEmu / normDen) : '',
+      Hc_minus: metrics.HcMinus ?? '',
+      Hc_plus: metrics.HcPlus ?? '',
+      Hsat_minus: metrics.HsatMinus ?? '',
+      Hsat_plus: metrics.HsatPlus ?? '',
+      Mr_minus: metrics.MrMinus ?? '',
+      Mr_plus: metrics.MrPlus ?? '',
+      remanent_fraction_minus: metrics.remFracMinus ?? '',
+      remanent_fraction_plus: metrics.remFracPlus ?? '',
+      Msat_minus: metrics.MsatMinus ?? '',
+      Msat_plus: metrics.MsatPlus ?? '',
+      Msat_minus_emu: Number.isFinite(metrics.MsatMinus) ? convertMoment(metrics.MsatMinus, state.momentUnit, 'emu') : '',
+      Msat_plus_emu: Number.isFinite(metrics.MsatPlus) ? convertMoment(metrics.MsatPlus, state.momentUnit, 'emu') : '',
+      saturation_threshold_fraction: metrics.satFraction ?? ''
     };
     if (area_cm2 && area_m2) {
-      row.moment_per_area_emu_per_cm2 = normEmu / area_cm2;
-      row.moment_per_area_A = normSI / area_m2;
+      row.moment_per_area_emu_per_cm2 = basisEmu / area_cm2;
+      row.moment_per_area_A = basisSI / area_m2;
     }
     if (volume_m3) {
-      row.magnetization_emu_per_cm3 = normEmu / (volume_m3 * 1e6);
-      row.magnetization_A_per_m = normSI / volume_m3;
+      row.magnetization_emu_per_cm3 = basisEmu / (area_cm2 * (thickness_m * 100));
+      row.magnetization_A_per_m = basisSI / volume_m3;
+      row.Msat_minus_emu_per_cm3 = Number.isFinite(metrics.MsatMinus) ? convertMoment(metrics.MsatMinus, state.momentUnit, 'emu') / (area_cm2 * (thickness_m * 100)) : '';
+      row.Msat_plus_emu_per_cm3 = Number.isFinite(metrics.MsatPlus) ? convertMoment(metrics.MsatPlus, state.momentUnit, 'emu') / (area_cm2 * (thickness_m * 100)) : '';
     }
-    return roundRow(row);
+    return row;
   });
 }
+
 
 function convertField(v, from, to) {
   let oe;
