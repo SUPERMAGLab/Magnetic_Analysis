@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QD Magnetic Analysis — SUPERMAG Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+#smg-app {
+  --bg:#FAF7F2; --surface:#FFFFFF; --bdr:#d4c4b0; --maroon:#501214; --maroon-dark:#3a0d0f;
+  --gold:#6A5638; --gold-bg:#fdf6ec; --fg:#2a0d0f; --dim:#7a5a5c; --grn:#2e7d32; --red:#c62828;
+  min-height:100vh; background:var(--bg); font-family:'IBM Plex Sans',sans-serif; color:var(--fg); line-height:1.5;
+}
+#smg-app .smg-header { background:var(--maroon); position:relative; overflow:hidden; }
+#smg-app .smg-header::after {
+  content:''; position:absolute; top:-70px; right:-70px; width:320px; height:320px;
+  background:radial-gradient(circle, rgba(106,86,56,0.38) 0%, transparent 68%); pointer-events:none;
+}
+#smg-app .smg-header-inner { max-width:980px; margin:0 auto; padding:26px 24px 22px; position:relative; z-index:1; }
+#smg-app .smg-eyebrow { font-family:'IBM Plex Mono',monospace; font-size:0.67rem; color:#c8a96e; text-transform:uppercase; letter-spacing:0.14em; margin-bottom:7px; }
+#smg-app .smg-header h1 { font-family:'EB Garamond',serif; font-weight:600; font-size:1.9rem; color:#fff; margin-bottom:4px; letter-spacing:-0.01em; }
+#smg-app .smg-subtitle { font-style:italic; font-size:0.82rem; color:rgba(255,255,255,0.68); }
+#smg-app .smg-tabbar { background:var(--maroon-dark); overflow-x:auto; scrollbar-width:none; }
+#smg-app .smg-tabbar::-webkit-scrollbar { display:none; }
+#smg-app .smg-tabbar-inner { max-width:980px; margin:0 auto; display:flex; padding:0 20px; }
+#smg-app .smg-tab {
+  font-size:0.72rem; font-weight:500; color:rgba(255,255,255,0.45); background:none; border:none;
+  border-bottom:3px solid transparent; padding:11px 16px 10px; cursor:pointer; white-space:nowrap; transition:color 0.15s, border-color 0.15s; pointer-events:none;
+}
+#smg-app .smg-tab.unlocked { pointer-events:auto; color:rgba(255,255,255,0.58); }
+#smg-app .smg-tab.unlocked:hover { color:rgba(255,255,255,0.8); }
+#smg-app .smg-tab.active { color:#c8a96e !important; border-bottom-color:#c8a96e; pointer-events:auto; }
+#smg-app .smg-tab.completed { opacity:0.6; pointer-events:auto; }
+#smg-app .smg-tab.completed::before { content:'✓ '; }
+#smg-app .smg-main { max-width:980px; margin:0 auto; padding:28px 24px 60px; }
+#smg-app .smg-card {
+  background:var(--surface); border:1px solid var(--bdr); border-radius:10px; box-shadow:0 1px 4px rgba(80,18,20,0.07);
+  padding:24px; margin-bottom:20px;
+}
+#smg-app .smg-card-title { font-family:'EB Garamond',serif; font-weight:600; font-size:1.18rem; color:var(--fg); margin-bottom:4px; }
+#smg-app .smg-card-desc { font-style:italic; font-size:0.8rem; color:var(--dim); margin-bottom:18px; }
+#smg-app .smg-section-title { font-family:'EB Garamond',serif; font-size:1rem; font-weight:600; color:var(--fg); margin-bottom:4px; }
+#smg-app .smg-result-card { background:var(--gold-bg); border:1.5px solid var(--gold); border-radius:10px; padding:14px 18px; margin-bottom:16px; }
+#smg-app .smg-result-label {
+  font-size:0.72rem; font-weight:600; color:var(--gold); text-transform:uppercase; letter-spacing:0.12em; margin-bottom:5px;
+}
+#smg-app .smg-result-value { font-family:'IBM Plex Mono',monospace; font-weight:600; color:var(--maroon); font-size:0.88rem; word-break:break-all; }
+#smg-app .smg-kv { display:flex; justify-content:space-between; align-items:baseline; padding:8px 0; border-bottom:1px solid rgba(212,196,176,0.4); gap:12px; }
+#smg-app .smg-kv:last-child { border-bottom:none; }
+#smg-app .smg-kv-key { font-size:0.8rem; color:var(--dim); flex-shrink:0; }
+#smg-app .smg-kv-val { font-family:'IBM Plex Mono',monospace; font-weight:600; color:var(--maroon); font-size:0.8rem; text-align:right; word-break:break-word; }
+#smg-app .smg-dropzone {
+  border:2px dashed var(--bdr); border-radius:10px; padding:38px 24px; text-align:center; cursor:pointer; transition:border-color 0.18s, background 0.18s;
+  background:var(--bg); user-select:none;
+}
+#smg-app .smg-dropzone:hover, #smg-app .smg-dropzone.drag-over { border-color:var(--maroon); background:rgba(80,18,20,0.03); }
+#smg-app .smg-dropzone-icon { font-size:2.4rem; margin-bottom:12px; opacity:0.45; display:block; }
+#smg-app .smg-dropzone-text { font-size:0.9rem; color:var(--dim); margin-bottom:6px; }
+#smg-app .smg-dropzone-hint { font-size:0.72rem; color:#b5a99a; font-family:'IBM Plex Mono',monospace; letter-spacing:0.04em; }
+#smg-app input[type="file"] { display:none; }
+#smg-app .btn-primary, #smg-app .btn-ghost, #smg-app .btn-gold {
+  border-radius:6px; padding:9px 22px; font-family:'IBM Plex Sans',sans-serif; font-size:0.83rem; font-weight:500; cursor:pointer;
+  transition:opacity 0.15s, transform 0.1s; display:inline-flex; align-items:center; gap:6px;
+}
+#smg-app .btn-primary { background:var(--maroon); color:#fff; border:none; }
+#smg-app .btn-ghost { background:transparent; border:1.5px solid var(--bdr); color:var(--dim); }
+#smg-app .btn-gold { background:var(--gold); color:#fff; border:none; padding:11px 30px; font-size:0.9rem; }
+#smg-app .btn-primary:hover, #smg-app .btn-gold:hover { opacity:0.87; }
+#smg-app .btn-ghost:hover { border-color:var(--maroon); color:var(--maroon); }
+#smg-app .btn-primary:active, #smg-app .btn-ghost:active, #smg-app .btn-gold:active { transform:scale(0.97); }
+#smg-app .btn-primary:disabled, #smg-app .btn-ghost:disabled { opacity:0.38; cursor:not-allowed; }
+#smg-app .btn-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+#smg-app .form-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px 16px; }
+#smg-app .form-grid-3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px 16px; }
+#smg-app .field-wrap label { display:block; font-size:0.76rem; font-weight:600; color:var(--dim); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em; }
+#smg-app select, #smg-app input[type="number"], #smg-app input[type="text"] {
+  width:100%; appearance:none; -webkit-appearance:none; border:1.5px solid var(--bdr); border-radius:6px;
+  padding:8px 10px; font-family:'IBM Plex Sans',sans-serif; font-size:0.82rem; color:var(--fg); background:var(--surface); transition:border-color .15s, box-shadow .15s;
+}
+#smg-app select:focus, #smg-app input[type="number"]:focus, #smg-app input[type="text"]:focus {
+  outline:none; border-color:var(--maroon); box-shadow:0 0 0 3px rgba(80,18,20,0.10);
+}
+#smg-app .smg-progress { display:none; align-items:center; gap:10px; padding:14px 0 4px; font-size:0.8rem; color:var(--dim); }
+#smg-app .smg-progress.active { display:flex; }
+#smg-app .smg-spinner { width:15px; height:15px; border:2px solid var(--bdr); border-top-color:var(--maroon); border-radius:50%; animation:spin 0.55s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+#smg-app .smg-badge-ok {
+  display:inline-flex; align-items:center; gap:5px; background:rgba(46,125,50,0.08); color:var(--grn); border:1px solid rgba(46,125,50,0.22);
+  border-radius:20px; padding:3px 11px; font-size:0.72rem; font-family:'IBM Plex Mono',monospace;
+}
+#smg-app .smg-alert { padding:10px 14px; border-radius:6px; font-size:0.8rem; margin-top:14px; line-height:1.5; }
+#smg-app .smg-alert-err { background:rgba(198,40,40,0.07); border:1px solid rgba(198,40,40,0.25); color:#8a1010; }
+#smg-app .smg-hr { border:none; border-top:1px solid var(--bdr); margin:20px 0; }
+#smg-app .preview-wrap { overflow:auto; border-radius:8px; border:1px solid var(--bdr); margin-top:8px; }
+#smg-app .smg-table { border-collapse:collapse; width:100%; min-width:480px; }
+#smg-app .smg-table thead th { background:var(--maroon); color:#fff; font-family:'IBM Plex Mono',monospace; font-size:0.7rem; font-weight:400; padding:8px 12px; text-align:left; white-space:nowrap; }
+#smg-app .smg-table tbody td { font-family:'IBM Plex Mono',monospace; font-size:0.72rem; color:var(--fg); padding:6px 12px; border-bottom:1px solid rgba(212,196,176,0.35); white-space:nowrap; }
+#smg-app .smg-table tbody tr:nth-child(even) td { background:rgba(212,196,176,0.08); }
+#smg-app .tab-panel { display:none; }
+#smg-app .tab-panel.active { display:block; }
+#smg-app .hidden { display:none !important; }
+#smg-app .muted-note { font-size:0.76rem; color:var(--dim); margin-top:6px; }
+#smg-app .checkline { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.82rem; color:var(--fg); }
+#smg-app .checkline input { width:auto; }
+#smg-app .plot-wrap { border:1px solid var(--bdr); border-radius:8px; background:#fff; padding:10px; }
+#smg-app canvas { width:100%; height:360px; display:block; }
+#smg-app .mini { font-size:0.72rem; color:var(--dim); }
+#smg-app .pill-row { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+#smg-app .pill {
+  border:1px solid var(--bdr); border-radius:999px; padding:6px 10px; font-size:0.74rem; color:var(--dim); background:rgba(212,196,176,0.08);
+}
+#smg-app footer {
+  background:var(--maroon-dark); padding:20px 24px; text-align:center; color:rgba(255,255,255,0.5); font-size:0.72rem; line-height:1.65;
+}
+#smg-app footer strong { color:rgba(255,255,255,0.72); }
+@media (max-width: 760px) {
+  #smg-app .smg-header-inner { padding:20px 16px 18px; }
+  #smg-app .smg-main { padding:20px 16px 48px; }
+  #smg-app .smg-card { padding:18px 16px; }
+  #smg-app .smg-tab { padding:10px 12px; }
+  #smg-app .form-grid, #smg-app .form-grid-3 { grid-template-columns:1fr; }
+  #smg-app canvas { height:300px; }
+}
+</style>
+</head>
+<body>
+<div id="smg-app">
+<header class="smg-header">
+  <div class="smg-header-inner">
+    <div class="smg-eyebrow">SUPERMAG Lab · Texas State University</div>
+    <h1>QD Magnetic Analysis</h1>
+    <p class="smg-subtitle">Load Quantum Design .dat files, subtract linear high-field background, normalize by geometry, and export processed magnetic data in SI and emu units.</p>
+  </div>
+</header>
+
+<nav class="smg-tabbar">
+  <div class="smg-tabbar-inner">
+    <button class="smg-tab active unlocked" id="tab-btn-1" onclick="goTab(1)">1 — Upload</button>
+    <button class="smg-tab" id="tab-btn-2" onclick="goTab(2)">2 — Columns</button>
+    <button class="smg-tab" id="tab-btn-3" onclick="goTab(3)">3 — Background</button>
+    <button class="smg-tab" id="tab-btn-4" onclick="goTab(4)">4 — Normalize</button>
+    <button class="smg-tab" id="tab-btn-5" onclick="goTab(5)">5 — Export</button>
+  </div>
+</nav>
+
+<main class="smg-main">
+  <div class="tab-panel active" id="tab1">
+    <div class="smg-card">
+      <div class="smg-card-title">Upload Quantum Design Data File</div>
+      <p class="smg-card-desc">Accepts PPMS/MPMS/MultiVu-style .dat files. Metadata are stripped automatically and only the [Data] section is used for analysis.</p>
+
+      <div class="smg-dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+        <span class="smg-dropzone-icon">📂</span>
+        <div class="smg-dropzone-text">Drop your .dat file here, or click to browse</div>
+        <div class="smg-dropzone-hint">.dat · PPMS · MPMS3 · SQUID VSM</div>
+      </div>
+      <input type="file" id="fileInput" accept=".dat,.txt,.csv" onchange="handleFileInput(this)">
+
+      <div class="smg-progress" id="parseProgress"><div class="smg-spinner"></div><span>Parsing file…</span></div>
+
+      <div id="fileInfoSection" class="hidden">
+        <hr class="smg-hr">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+          <span class="smg-badge-ok">✓ File loaded</span>
+          <span id="fileNameDisplay" style="font-family:'IBM Plex Mono',monospace; font-size:0.8rem; color:var(--gold);"></span>
+        </div>
+        <div class="smg-result-card" id="fileSummaryCard"></div>
+        <div class="btn-row" style="margin-top:18px;">
+          <button class="btn-primary" onclick="goTab(2)">Next: Select Analysis Columns →</button>
+          <button class="btn-ghost" onclick="resetTool()">Load different file</button>
+        </div>
+      </div>
+      <div id="parseError" class="smg-alert smg-alert-err hidden"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab2">
+    <div class="smg-card">
+      <div class="smg-card-title">Select Field and Moment Columns</div>
+      <p class="smg-card-desc">Pick the x-axis field column and the magnetic moment column to analyze. Unit assumptions are set here as well.</p>
+
+      <div class="form-grid">
+        <div class="field-wrap">
+          <label for="fieldColumn">Field column</label>
+          <select id="fieldColumn"></select>
+        </div>
+        <div class="field-wrap">
+          <label for="momentColumn">Moment column</label>
+          <select id="momentColumn"></select>
+        </div>
+        <div class="field-wrap">
+          <label for="fieldUnit">Input field unit</label>
+          <select id="fieldUnit">
+            <option value="Oe">Oe</option>
+            <option value="T">T</option>
+            <option value="A/m">A/m</option>
+          </select>
+        </div>
+        <div class="field-wrap">
+          <label for="momentUnit">Input moment unit</label>
+          <select id="momentUnit">
+            <option value="emu">emu</option>
+            <option value="A m^2">A·m²</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="pill-row" id="autoDetectRow"></div>
+
+      <hr class="smg-hr">
+      <div class="smg-section-title">Preview of chosen columns</div>
+      <p class="muted-note">The first 10 valid numerical rows are shown below.</p>
+      <div class="preview-wrap">
+        <table class="smg-table" id="previewTable">
+          <thead><tr><th>Field</th><th>Moment</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="btn-row" style="margin-top:22px;">
+        <button class="btn-ghost" onclick="goTab(1)">← Back</button>
+        <button class="btn-primary" onclick="goTab(3)">Next: Background subtraction →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab3">
+    <div class="smg-card">
+      <div class="smg-card-title">Background Subtraction</div>
+      <p class="smg-card-desc">Choose left and right outer-field windows. The tool fits separate straight lines to the negative- and positive-field regions, averages their slopes, and subtracts only the linear field-dependent background using moment − field × slope.</p>
+
+      <div class="form-grid-3">
+        <div class="field-wrap">
+          <label for="leftMin">Left region min</label>
+          <input type="number" id="leftMin" step="any">
+        </div>
+        <div class="field-wrap">
+          <label for="leftMax">Left region max</label>
+          <input type="number" id="leftMax" step="any">
+        </div>
+        <div class="field-wrap">
+          <label for="rightMin">Right region min</label>
+          <input type="number" id="rightMin" step="any">
+        </div>
+        <div class="field-wrap">
+          <label for="rightMax">Right region max</label>
+          <input type="number" id="rightMax" step="any">
+        </div>
+        <div class="field-wrap">
+          <label for="fitMode">Fitted baseline</label>
+          <select id="fitMode">
+            <option value="linear">m(H) = aH + b</option>
+          </select>
+        </div>
+        <div class="field-wrap">
+          <label>&nbsp;</label>
+          <button class="btn-primary" style="width:100%; justify-content:center;" onclick="applyBackgroundFit()">Apply fit and subtract</button>
+        </div>
+      </div>
+
+      <div class="muted-note">Tip: the defaults are seeded from the outer 15% of the field range. Refine the limits numerically so the left window captures the negative-field linear region and the right window captures the positive-field linear region.</div>
+
+      <hr class="smg-hr">
+      <div class="plot-wrap"><canvas id="analysisPlot" width="900" height="360"></canvas></div>
+
+      <div class="smg-result-card" id="fitSummary">
+        <div class="smg-result-label">Background fit summary</div>
+        <div class="smg-kv"><span class="smg-kv-key">Status</span><span class="smg-kv-val">Waiting for fit</span></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-ghost" onclick="goTab(2)">← Back</button>
+        <button class="btn-primary" onclick="goTab(4)">Next: Normalize →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab4">
+    <div class="smg-card">
+      <div class="smg-card-title">Geometry and Normalization</div>
+      <p class="smg-card-desc">Enter sample geometry to compute moment per area and magnetization per volume. The area is always required; thickness is only needed for volumetric magnetization.</p>
+
+      <div class="form-grid">
+        <div class="field-wrap">
+          <label for="areaValue">Sample area</label>
+          <input type="number" id="areaValue" step="any" min="0" placeholder="e.g. 0.25">
+        </div>
+        <div class="field-wrap">
+          <label for="areaUnit">Area unit</label>
+          <select id="areaUnit">
+            <option value="cm2">cm²</option>
+            <option value="mm2">mm²</option>
+            <option value="m2">m²</option>
+          </select>
+        </div>
+        <div class="field-wrap">
+          <label for="thicknessValue">Thickness</label>
+          <input type="number" id="thicknessValue" step="any" min="0" placeholder="optional">
+        </div>
+        <div class="field-wrap">
+          <label for="thicknessUnit">Thickness unit</label>
+          <select id="thicknessUnit">
+            <option value="nm">nm</option>
+            <option value="um">µm</option>
+            <option value="mm">mm</option>
+            <option value="m">m</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="checkline"><input type="checkbox" id="useSubtractedForNorm" checked> Use background-subtracted moment for normalization outputs</label>
+
+      <div class="btn-row" style="margin-top:16px;">
+        <button class="btn-primary" onclick="updateNormalization()">Update normalization</button>
+      </div>
+
+      <hr class="smg-hr">
+      <div class="smg-result-card" id="normSummary">
+        <div class="smg-result-label">Normalization summary</div>
+        <div class="smg-kv"><span class="smg-kv-key">Status</span><span class="smg-kv-val">Area not yet entered</span></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-ghost" onclick="goTab(3)">← Back</button>
+        <button class="btn-primary" onclick="goTab(5)">Next: Export →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab5">
+    <div class="smg-card">
+      <div class="smg-card-title">Export Processed Data</div>
+      <p class="smg-card-desc">The export contains raw field and moment, fitted background, subtracted moment, and normalized quantities in both cgs/emu and SI units whenever geometry has been supplied.</p>
+
+      <div id="exportSummaryBlock"></div>
+
+      <hr class="smg-hr">
+      <div class="btn-row">
+        <button class="btn-gold" onclick="exportProcessedCSV()">⬇ Download processed CSV</button>
+        <button class="btn-ghost" onclick="goTab(4)">← Back</button>
+      </div>
+      <div id="exportSuccess" class="hidden" style="margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span class="smg-badge-ok">✓ Downloaded</span>
+        <span id="exportFileNameLabel" style="font-family:'IBM Plex Mono',monospace; font-size:0.78rem; color:var(--gold);"></span>
+      </div>
+    </div>
+
+    <div class="smg-card">
+      <div class="smg-card-title" style="font-size:1.05rem;">Included output columns</div>
+      <div class="smg-kv"><span class="smg-kv-key">Always included</span><span class="smg-kv-val">field, raw moment, fitted background, background-subtracted moment</span></div>
+      <div class="smg-kv"><span class="smg-kv-key">If area entered</span><span class="smg-kv-val">moment/area in emu/cm² and A</span></div>
+      <div class="smg-kv"><span class="smg-kv-key">If area and thickness entered</span><span class="smg-kv-val">magnetization in emu/cm³ and A/m</span></div>
+      <div class="smg-kv"><span class="smg-kv-key">Unit handling</span><span class="smg-kv-val">SI and emu/cgs columns are both written side-by-side</span></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <strong>SUPERMAG Lab</strong> — Department of Physics, Texas State University<br>
+  This tool is provided as-is for research use without warranty. Users should independently verify all fits, unit conversions, and normalized outputs.
+</footer>
+</div>
+
+<script>
+let state = {
+  fileName:'',
+  baseName:'',
+  columns:[],
+  rawRows:[],
+  numericData:[],
+  fieldIndex:0,
+  momentIndex:1,
+  fieldUnit:'Oe',
+  momentUnit:'emu',
+  fit: null,
+  normalization: null
+};
+
+const dropzone = document.getElementById('dropzone');
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', e => { dropzone.classList.remove('drag-over'); });
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0]; if (f) processFile(f);
+});
+
+function goTab(n) {
+  if (n > 1 && state.columns.length === 0) return;
+  document.querySelectorAll('#smg-app .smg-tab').forEach(btn => {
+    const t = parseInt(btn.id.replace('tab-btn-', ''));
+    btn.classList.remove('active', 'completed');
+    if (t === n) btn.classList.add('active');
+    else if (t < n) btn.classList.add('completed', 'unlocked');
+    else if (state.columns.length > 0) btn.classList.add('unlocked');
+  });
+  document.querySelectorAll('#smg-app .tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab' + n).classList.add('active');
+
+  if (n === 2) renderColumnOptions();
+  if (n === 3) { seedFitWindows(); updatePlot(); renderFitSummary(); }
+  if (n === 4) renderNormSummary();
+  if (n === 5) renderExportSummary();
+}
+function unlockTabs() {
+  ['tab-btn-2','tab-btn-3','tab-btn-4','tab-btn-5'].forEach(id => document.getElementById(id).classList.add('unlocked'));
+}
+function handleFileInput(input) { if (input.files && input.files[0]) processFile(input.files[0]); }
+
+function processFile(file) {
+  document.getElementById('parseProgress').classList.add('active');
+  document.getElementById('fileInfoSection').classList.add('hidden');
+  document.getElementById('parseError').classList.add('hidden');
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const parsed = parseQDFile(e.target.result, file.name);
+      if (!parsed) throw new Error('No [Data] section found. Check that the file is a QD MultiVu-style export.');
+      state.fileName = parsed.fileName;
+      state.baseName = parsed.baseName;
+      state.columns = parsed.columns;
+      state.rawRows = parsed.dataRows;
+      guessDefaultColumnsAndUnits();
+      rebuildNumericData();
+      seedFitWindows();
+      document.getElementById('parseProgress').classList.remove('active');
+      renderFileInfo(file);
+      unlockTabs();
+      renderColumnOptions();
+    } catch (err) {
+      document.getElementById('parseProgress').classList.remove('active');
+      showParseError(err.message);
+    }
+  };
+  reader.onerror = function() {
+    document.getElementById('parseProgress').classList.remove('active');
+    showParseError('FileReader error — could not read the file.');
+  };
+  reader.readAsText(file);
+}
+
+function parseQDFile(text, fileName) {
+  const lines = text.split(/\r?\n/);
+  let dataLineIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() === '[Data]') { dataLineIdx = i + 1; break; }
+  }
+  if (dataLineIdx === -1) {
+    // Allow plain CSV/TXT fallback using first line as header
+    let firstNonBlank = lines.findIndex(line => line.trim() !== '');
+    if (firstNonBlank === -1) return null;
+    const columns = splitCSVLine(lines[firstNonBlank]).map(c => c.trim());
+    const dataRows = [];
+    for (let i = firstNonBlank + 1; i < lines.length; i++) {
+      if (lines[i].trim() === '') continue;
+      dataRows.push(splitCSVLine(lines[i]));
+    }
+    return { fileName, baseName:fileName.replace(/\.[^.]+$/, ''), columns, dataRows };
+  }
+  while (dataLineIdx < lines.length && lines[dataLineIdx].trim() === '') dataLineIdx++;
+  if (dataLineIdx >= lines.length) return null;
+  const columns = splitCSVLine(lines[dataLineIdx]).map(c => c.trim());
+  const dataRows = [];
+  for (let i = dataLineIdx + 1; i < lines.length; i++) {
+    if (lines[i].trim() === '') continue;
+    dataRows.push(splitCSVLine(lines[i]));
+  }
+  return { fileName, baseName:fileName.replace(/\.[^.]+$/, ''), columns, dataRows };
+}
+
+function splitCSVLine(line) {
+  const out = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i+1] === '"') { cur += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      out.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function guessDefaultColumnsAndUnits() {
+  const names = state.columns.map(c => c.toLowerCase());
+  const fieldCandidates = ['magnetic field', 'field', 'applied field', 'h'];
+  const momentCandidates = ['moment', 'moment (emu)', 'long moment', 'dc moment', 'magnetization'];
+  state.fieldIndex = findBestColumn(names, fieldCandidates, 0);
+  state.momentIndex = findBestColumn(names, momentCandidates, Math.min(1, state.columns.length - 1));
+
+  const fieldName = state.columns[state.fieldIndex]?.toLowerCase() || '';
+  const momentName = state.columns[state.momentIndex]?.toLowerCase() || '';
+  state.fieldUnit = fieldName.includes('(t)') || /\bt\b/.test(fieldName) ? 'T' :
+                    fieldName.includes('a/m') ? 'A/m' : 'Oe';
+  state.momentUnit = momentName.includes('a m') || momentName.includes('am^2') ? 'A m^2' : 'emu';
+}
+function findBestColumn(names, candidates, fallback) {
+  let best = fallback, bestScore = -1;
+  names.forEach((name, idx) => {
+    let score = 0;
+    candidates.forEach(term => { if (name.includes(term)) score += term.length; });
+    if (score > bestScore) { bestScore = score; best = idx; }
+  });
+  return best;
+}
+function renderFileInfo(file) {
+  document.getElementById('fileInfoSection').classList.remove('hidden');
+  document.getElementById('fileNameDisplay').textContent = file.name;
+  const sz = file.size >= 1048576 ? (file.size / 1048576).toFixed(2) + ' MB' : (file.size / 1024).toFixed(1) + ' KB';
+  document.getElementById('fileSummaryCard').innerHTML = `
+    <div class="smg-result-label">File Summary</div>
+    <div class="smg-kv"><span class="smg-kv-key">File name</span><span class="smg-kv-val">${esc(state.fileName)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">File size</span><span class="smg-kv-val">${sz}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Data columns</span><span class="smg-kv-val">${state.columns.length}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Raw rows</span><span class="smg-kv-val">${state.rawRows.length.toLocaleString()}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Usable numeric rows</span><span class="smg-kv-val">${state.numericData.length.toLocaleString()}</span></div>
+  `;
+}
+function showParseError(msg) {
+  const el = document.getElementById('parseError');
+  el.textContent = '⚠ ' + msg;
+  el.classList.remove('hidden');
+}
+function resetTool() {
+  state = { fileName:'', baseName:'', columns:[], rawRows:[], numericData:[], fieldIndex:0, momentIndex:1, fieldUnit:'Oe', momentUnit:'emu', fit:null, normalization:null };
+  document.getElementById('fileInfoSection').classList.add('hidden');
+  document.getElementById('parseError').classList.add('hidden');
+  document.getElementById('fileInput').value = '';
+  document.getElementById('parseProgress').classList.remove('active');
+  ['tab-btn-2','tab-btn-3','tab-btn-4','tab-btn-5'].forEach(id => {
+    const b = document.getElementById(id); b.classList.remove('active','completed','unlocked');
+  });
+  document.getElementById('tab-btn-1').classList.add('active');
+  document.querySelectorAll('#smg-app .tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab1').classList.add('active');
+}
+
+function renderColumnOptions() {
+  const fieldSel = document.getElementById('fieldColumn');
+  const momentSel = document.getElementById('momentColumn');
+  fieldSel.innerHTML = '';
+  momentSel.innerHTML = '';
+  state.columns.forEach((col, i) => {
+    const opt1 = document.createElement('option');
+    opt1.value = i; opt1.textContent = col || `Column ${i+1}`;
+    if (i === state.fieldIndex) opt1.selected = true;
+    fieldSel.appendChild(opt1);
+    const opt2 = document.createElement('option');
+    opt2.value = i; opt2.textContent = col || `Column ${i+1}`;
+    if (i === state.momentIndex) opt2.selected = true;
+    momentSel.appendChild(opt2);
+  });
+  document.getElementById('fieldUnit').value = state.fieldUnit;
+  document.getElementById('momentUnit').value = state.momentUnit;
+  fieldSel.onchange = () => { state.fieldIndex = parseInt(fieldSel.value); rebuildNumericData(); seedFitWindows(); renderPreview(); updatePlot(); };
+  momentSel.onchange = () => { state.momentIndex = parseInt(momentSel.value); rebuildNumericData(); renderPreview(); updatePlot(); };
+  document.getElementById('fieldUnit').onchange = () => { state.fieldUnit = document.getElementById('fieldUnit').value; updatePlot(); renderExportSummary(); };
+  document.getElementById('momentUnit').onchange = () => { state.momentUnit = document.getElementById('momentUnit').value; renderExportSummary(); renderNormSummary(); };
+  const pills = document.getElementById('autoDetectRow');
+  pills.innerHTML = `
+    <span class="pill">Auto-detected field: ${esc(state.columns[state.fieldIndex] || '—')}</span>
+    <span class="pill">Auto-detected moment: ${esc(state.columns[state.momentIndex] || '—')}</span>
+  `;
+  renderPreview();
+}
+
+function rebuildNumericData() {
+  state.numericData = [];
+  for (let i = 0; i < state.rawRows.length; i++) {
+    const row = state.rawRows[i];
+    const x = parseFloat((row[state.fieldIndex] ?? '').trim());
+    const y = parseFloat((row[state.momentIndex] ?? '').trim());
+    if (Number.isFinite(x) && Number.isFinite(y)) state.numericData.push({x, y, rowIndex:i});
+  }
+  state.fit = null;
+  updateNormalization();
+}
+function renderPreview() {
+  const tbody = document.querySelector('#previewTable tbody');
+  tbody.innerHTML = '';
+  state.numericData.slice(0, 10).forEach(pt => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${fmt(pt.x)}</td><td>${fmt(pt.y)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function seedFitWindows() {
+  if (!state.numericData.length) return;
+  const xs = state.numericData.map(p => p.x);
+  const xmin = Math.min(...xs), xmax = Math.max(...xs), span = xmax - xmin;
+  const frac = 0.15;
+  document.getElementById('leftMin').value = fmt(xmin);
+  document.getElementById('leftMax').value = fmt(xmin + frac * span);
+  document.getElementById('rightMin').value = fmt(xmax - frac * span);
+  document.getElementById('rightMax').value = fmt(xmax);
+}
+function getFitWindows() {
+  return {
+    leftMin: parseFloat(document.getElementById('leftMin').value),
+    leftMax: parseFloat(document.getElementById('leftMax').value),
+    rightMin: parseFloat(document.getElementById('rightMin').value),
+    rightMax: parseFloat(document.getElementById('rightMax').value),
+  };
+}
+function applyBackgroundFit() {
+  if (state.numericData.length < 3) return;
+  const w = getFitWindows();
+  if (![w.leftMin,w.leftMax,w.rightMin,w.rightMax].every(Number.isFinite)) {
+    alert('Please enter all four field limits.'); return;
+  }
+
+  const leftPoints = state.numericData.filter(p =>
+    p.x >= Math.min(w.leftMin, w.leftMax) && p.x <= Math.max(w.leftMin, w.leftMax)
+  );
+  const rightPoints = state.numericData.filter(p =>
+    p.x >= Math.min(w.rightMin, w.rightMax) && p.x <= Math.max(w.rightMin, w.rightMax)
+  );
+
+  if (leftPoints.length < 2 || rightPoints.length < 2) {
+    alert('Each fit window must contain at least two points.'); return;
+  }
+
+  const leftFit = linearFit(leftPoints.map(p => p.x), leftPoints.map(p => p.y));
+  const rightFit = linearFit(rightPoints.map(p => p.x), rightPoints.map(p => p.y));
+  const avgSlope = 0.5 * (leftFit.slope + rightFit.slope);
+
+  state.fit = {
+    mode: 'avg_slope_only',
+    windows: w,
+    selectedCount: leftPoints.length + rightPoints.length,
+    slope: avgSlope,
+    intercept: 0,
+    left: {
+      ...leftFit,
+      count: leftPoints.length,
+    },
+    right: {
+      ...rightFit,
+      count: rightPoints.length,
+    },
+    derived: state.numericData.map(p => {
+      const bg = avgSlope * p.x;
+      return {x:p.x, y:p.y, bg, ySub:p.y - bg, rowIndex:p.rowIndex};
+    })
+  };
+  updatePlot();
+  renderFitSummary();
+  updateNormalization();
+}
+function linearFit(xs, ys) {
+  const n = xs.length;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = 0; i < n; i++) {
+    sx += xs[i]; sy += ys[i]; sxx += xs[i]*xs[i]; sxy += xs[i]*ys[i];
+  }
+  const denom = n*sxx - sx*sx;
+  if (Math.abs(denom) < 1e-30) return { slope:0, intercept:mean(ys), r2:0 };
+  const slope = (n*sxy - sx*sy) / denom;
+  const intercept = (sy - slope*sx) / n;
+  const ybar = sy / n;
+  let ssTot = 0, ssRes = 0;
+  for (let i = 0; i < n; i++) {
+    const yfit = slope*xs[i] + intercept;
+    ssTot += (ys[i] - ybar)**2;
+    ssRes += (ys[i] - yfit)**2;
+  }
+  const r2 = ssTot > 0 ? 1 - ssRes/ssTot : 1;
+  return { slope, intercept, r2 };
+}
+function mean(arr) { return arr.reduce((a,b)=>a+b,0) / arr.length; }
+
+function renderFitSummary() {
+  const card = document.getElementById('fitSummary');
+  if (!state.fit) {
+    card.innerHTML = `<div class="smg-result-label">Background fit summary</div>
+      <div class="smg-kv"><span class="smg-kv-key">Status</span><span class="smg-kv-val">Waiting for fit</span></div>`;
+    return;
+  }
+  const f = state.fit;
+  card.innerHTML = `
+    <div class="smg-result-label">Background fit summary</div>
+    <div class="smg-kv"><span class="smg-kv-key">Baseline model</span><span class="smg-kv-val">Two side fits → averaged slope → branchwise intercepts</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Shared slope a</span><span class="smg-kv-val">${fmt(f.slope, 8)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Left fit slope</span><span class="smg-kv-val">${fmt(f.left.slope, 8)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Right fit slope</span><span class="smg-kv-val">${fmt(f.right.slope, 8)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Left intercept (shared slope)</span><span class="smg-kv-val">${fmt(f.left.interceptSharedSlope, 8)} ${esc(state.momentUnit)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Right intercept (shared slope)</span><span class="smg-kv-val">${fmt(f.right.interceptSharedSlope, 8)} ${esc(state.momentUnit)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Left R²</span><span class="smg-kv-val">${fmt(f.left.r2, 6)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Right R²</span><span class="smg-kv-val">${fmt(f.right.r2, 6)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Branch boundary</span><span class="smg-kv-val">${fmt(f.branchBoundary, 8)} ${esc(state.fieldUnit)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Points used</span><span class="smg-kv-val">${f.selectedCount} (${f.left.count} left, ${f.right.count} right)</span></div>
+  `;
+}
+
+function updatePlot() {
+  const canvas = document.getElementById('analysisPlot');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth || 900;
+  const cssHeight = canvas.clientHeight || 360;
+  if (canvas.width !== Math.round(cssWidth*dpr) || canvas.height !== Math.round(cssHeight*dpr)) {
+    canvas.width = Math.round(cssWidth*dpr); canvas.height = Math.round(cssHeight*dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,cssWidth,cssHeight);
+  if (!state.numericData.length) return;
+
+  const margin = {l:58, r:18, t:18, b:42};
+  const W = cssWidth - margin.l - margin.r;
+  const H = cssHeight - margin.t - margin.b;
+  const data = state.fit ? state.fit.derived : state.numericData.map(p => ({x:p.x, y:p.y, bg:null, ySub:null}));
+  const ys = state.fit ? data.flatMap(p => [p.y, p.bg, p.ySub]) : data.map(p => p.y);
+  const xs = data.map(p => p.x);
+  const xmin = Math.min(...xs), xmax = Math.max(...xs);
+  let ymin = Math.min(...ys.filter(v => Number.isFinite(v))), ymax = Math.max(...ys.filter(v => Number.isFinite(v)));
+  if (ymin === ymax) { ymin -= 1; ymax += 1; }
+  const padx = (xmax - xmin || 1) * 0.04;
+  const pady = (ymax - ymin || 1) * 0.08;
+  const x0 = xmin - padx, x1 = xmax + padx, y0 = ymin - pady, y1 = ymax + pady;
+  const X = x => margin.l + (x - x0) / (x1 - x0) * W;
+  const Y = y => margin.t + H - (y - y0) / (y1 - y0) * H;
+
+  // background windows shading
+  const windows = getFitWindows();
+  shadeWindow(ctx, X, margin, H, windows.leftMin, windows.leftMax);
+  shadeWindow(ctx, X, margin, H, windows.rightMin, windows.rightMax);
+
+  // axes
+  ctx.strokeStyle = '#c7b8a4'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(margin.l, margin.t); ctx.lineTo(margin.l, margin.t+H); ctx.lineTo(margin.l+W, margin.t+H); ctx.stroke();
+  drawTicks(ctx, x0, x1, X, margin.t+H, true);
+  drawTicks(ctx, y0, y1, Y, margin.l, false);
+
+  // raw
+  drawSeries(ctx, data.map(p => [X(p.x), Y(p.y)]), '#501214', 1.6);
+  if (state.fit) {
+    drawSeries(ctx, data.map(p => [X(p.x), Y(p.bg)]), '#6A5638', 1.4, [6,4]);
+    drawSeries(ctx, data.map(p => [X(p.x), Y(p.ySub)]), '#2e7d32', 1.4);
+  }
+
+  // legend
+  let lx = margin.l + 8, ly = margin.t + 8;
+  legendItem(ctx, lx, ly, '#501214', 'Raw moment', []);
+  ly += 18;
+  if (state.fit) { legendItem(ctx, lx, ly, '#6A5638', 'Linear background', [6,4]); ly += 18; }
+  if (state.fit) legendItem(ctx, lx, ly, '#2e7d32', 'Background-subtracted', []);
+
+  // labels
+  ctx.fillStyle = '#7a5a5c';
+  ctx.font = '12px "IBM Plex Sans", sans-serif';
+  ctx.fillText(`Field (${state.fieldUnit})`, margin.l + W/2 - 28, cssHeight - 10);
+  ctx.save();
+  ctx.translate(15, margin.t + H/2 + 34);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText(`Moment (${state.momentUnit})`, 0, 0);
+  ctx.restore();
+}
+function shadeWindow(ctx, X, margin, H, a, b) {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+  ctx.fillStyle = 'rgba(200,169,110,0.12)';
+  const xa = X(Math.min(a,b)), xb = X(Math.max(a,b));
+  ctx.fillRect(xa, margin.t, xb - xa, H);
+}
+function drawSeries(ctx, pts, color, width, dash=[]) {
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.stroke(); ctx.restore();
+}
+function drawTicks(ctx, minv, maxv, map, fixed, isX) {
+  const n = 5;
+  ctx.fillStyle = '#7a5a5c';
+  ctx.font = '11px "IBM Plex Mono", monospace';
+  ctx.strokeStyle = '#c7b8a4';
+  for (let i=0; i<=n; i++) {
+    const v = minv + i*(maxv - minv)/n;
+    const p = map(v);
+    ctx.beginPath();
+    if (isX) { ctx.moveTo(p, fixed); ctx.lineTo(p, fixed + 5); }
+    else { ctx.moveTo(fixed - 5, p); ctx.lineTo(fixed, p); }
+    ctx.stroke();
+    const label = sci(v);
+    if (isX) ctx.fillText(label, p - ctx.measureText(label).width/2, fixed + 18);
+    else ctx.fillText(label, 6, p + 4);
+  }
+}
+function legendItem(ctx, x, y, color, text, dash=[]) {
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x+20, y); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#7a5a5c'; ctx.font = '12px "IBM Plex Sans", sans-serif'; ctx.fillText(text, x+28, y+4);
+}
+
+function updateNormalization() {
+  const areaVal = parseFloat(document.getElementById('areaValue').value);
+  const areaUnit = document.getElementById('areaUnit').value;
+  const tVal = parseFloat(document.getElementById('thicknessValue').value);
+  const tUnit = document.getElementById('thicknessUnit').value;
+  const useSub = document.getElementById('useSubtractedForNorm').checked;
+
+  state.normalization = {
+    areaInput: areaVal,
+    areaUnit,
+    thicknessInput: tVal,
+    thicknessUnit: tUnit,
+    useSubtracted: useSub,
+    area_m2: Number.isFinite(areaVal) && areaVal > 0 ? convertAreaToM2(areaVal, areaUnit) : null,
+    area_cm2: Number.isFinite(areaVal) && areaVal > 0 ? convertAreaToCm2(areaVal, areaUnit) : null,
+    thickness_m: Number.isFinite(tVal) && tVal > 0 ? convertThicknessToM(tVal, tUnit) : null,
+  };
+  renderNormSummary();
+  renderExportSummary();
+}
+function renderNormSummary() {
+  const card = document.getElementById('normSummary');
+  const n = state.normalization;
+  if (!n || !n.area_m2) {
+    card.innerHTML = `<div class="smg-result-label">Normalization summary</div>
+      <div class="smg-kv"><span class="smg-kv-key">Status</span><span class="smg-kv-val">Area not yet entered</span></div>`;
+    return;
+  }
+  const vol_m3 = n.thickness_m ? n.area_m2 * n.thickness_m : null;
+  card.innerHTML = `
+    <div class="smg-result-label">Normalization summary</div>
+    <div class="smg-kv"><span class="smg-kv-key">Area</span><span class="smg-kv-val">${fmt(n.areaInput)} ${esc(n.areaUnit)} = ${fmt(n.area_cm2)} cm² = ${fmt(n.area_m2)} m²</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Moment basis</span><span class="smg-kv-val">${n.useSubtracted ? 'Background-subtracted moment' : 'Raw moment'}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Areal output</span><span class="smg-kv-val">emu/cm² and A</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Volumetric output</span><span class="smg-kv-val">${vol_m3 ? 'emu/cm³ and A/m' : 'Thickness not entered'}</span></div>
+    ${vol_m3 ? `<div class="smg-kv"><span class="smg-kv-key">Volume</span><span class="smg-kv-val">${fmt(vol_m3)} m³</span></div>` : ''}
+  `;
+}
+function convertAreaToM2(v, unit) {
+  if (unit === 'cm2') return v * 1e-4;
+  if (unit === 'mm2') return v * 1e-6;
+  return v;
+}
+function convertAreaToCm2(v, unit) {
+  if (unit === 'cm2') return v;
+  if (unit === 'mm2') return v * 1e-2;
+  return v * 1e4;
+}
+function convertThicknessToM(v, unit) {
+  if (unit === 'nm') return v * 1e-9;
+  if (unit === 'um') return v * 1e-6;
+  if (unit === 'mm') return v * 1e-3;
+  return v;
+}
+
+function renderExportSummary() {
+  const outName = state.baseName ? state.baseName + '_magnetic_analysis.csv' : 'processed_magnetic_analysis.csv';
+  const n = state.normalization;
+  const fitStatus = state.fit ? 'Linear background fit ready' : 'No background fit yet';
+  const normStatus = (n && n.area_m2) ? (n.thickness_m ? 'Areal + volumetric outputs ready' : 'Areal outputs ready; thickness missing for volumetric outputs') : 'Geometry not yet entered';
+  document.getElementById('exportSummaryBlock').innerHTML = `
+    <div class="smg-result-card">
+      <div class="smg-result-label">Output filename</div>
+      <div class="smg-result-value">${esc(outName)}</div>
+    </div>
+    <div class="smg-kv"><span class="smg-kv-key">Field column</span><span class="smg-kv-val">${esc(state.columns[state.fieldIndex] || '—')} (${esc(state.fieldUnit)})</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Moment column</span><span class="smg-kv-val">${esc(state.columns[state.momentIndex] || '—')} (${esc(state.momentUnit)})</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Background subtraction</span><span class="smg-kv-val">${fitStatus}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Normalization</span><span class="smg-kv-val">${normStatus}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Rows exported</span><span class="smg-kv-val">${state.numericData.length.toLocaleString()}</span></div>
+  `;
+}
+
+function exportProcessedCSV() {
+  if (!state.numericData.length) return;
+  const n = state.normalization || {};
+  const useSub = !!n.useSubtracted;
+  const rows = getProcessedRows();
+  const headers = Object.keys(rows[0]);
+  const csv = [headers.map(csvCell).join(',')].concat(rows.map(r => headers.map(h => csvCell(r[h])).join(','))).join('\r\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const outName = state.baseName + '_magnetic_analysis.csv';
+  const a = document.createElement('a'); a.href = url; a.download = outName;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  document.getElementById('exportFileNameLabel').textContent = outName;
+  document.getElementById('exportSuccess').classList.remove('hidden');
+  document.getElementById('exportSuccess').style.display = 'flex';
+}
+
+function getProcessedRows() {
+  const fitDerived = state.fit ? state.fit.derived : state.numericData.map(p => ({...p, bg:0, ySub:p.y}));
+  const n = state.normalization || {};
+  const area_cm2 = n.area_cm2 || null;
+  const area_m2 = n.area_m2 || null;
+  const thickness_m = n.thickness_m || null;
+  const volume_m3 = (area_m2 && thickness_m) ? area_m2 * thickness_m : null;
+  return fitDerived.map(p => {
+    const fieldOe = convertField(p.x, state.fieldUnit, 'Oe');
+    const fieldT = convertField(p.x, state.fieldUnit, 'T');
+    const fieldAm = convertField(p.x, state.fieldUnit, 'A/m');
+    const rawEmu = convertMoment(p.y, state.momentUnit, 'emu');
+    const rawSI = convertMoment(p.y, state.momentUnit, 'A m^2');
+    const bgEmu = convertMoment(p.bg, state.momentUnit, 'emu');
+    const bgSI = convertMoment(p.bg, state.momentUnit, 'A m^2');
+    const subEmu = convertMoment(p.ySub, state.momentUnit, 'emu');
+    const subSI = convertMoment(p.ySub, state.momentUnit, 'A m^2');
+    const normEmu = (n.useSubtracted ? subEmu : rawEmu);
+    const normSI = (n.useSubtracted ? subSI : rawSI);
+
+    const row = {
+      field_input: p.x,
+      field_Oe: fieldOe,
+      field_T: fieldT,
+      field_A_per_m: fieldAm,
+      moment_raw_emu: rawEmu,
+      moment_raw_A_m2: rawSI,
+      background_fit_emu: bgEmu,
+      background_fit_A_m2: bgSI,
+      moment_subtracted_emu: subEmu,
+      moment_subtracted_A_m2: subSI
+    };
+    if (area_cm2 && area_m2) {
+      row.moment_per_area_emu_per_cm2 = normEmu / area_cm2;
+      row.moment_per_area_A = normSI / area_m2;
+    }
+    if (volume_m3) {
+      row.magnetization_emu_per_cm3 = normEmu / (volume_m3 * 1e6);
+      row.magnetization_A_per_m = normSI / volume_m3;
+    }
+    return roundRow(row);
+  });
+}
+
+function convertField(v, from, to) {
+  let oe;
+  if (from === 'Oe') oe = v;
+  else if (from === 'T') oe = v * 1e4;
+  else if (from === 'A/m') oe = v * (4*Math.PI/1000);
+  if (to === 'Oe') return oe;
+  if (to === 'T') return oe * 1e-4;
+  return oe * (1000/(4*Math.PI));
+}
+function convertMoment(v, from, to) {
+  let emu = from === 'emu' ? v : v * 1e3;
+  return to === 'emu' ? emu : emu * 1e-3;
+}
+function roundRow(obj) {
+  const out = {};
+  Object.keys(obj).forEach(k => {
+    const v = obj[k];
+    out[k] = Number.isFinite(v) ? +Number(v).toPrecision(10) : '';
+  });
+  return out;
+}
+
+function csvCell(val) {
+  if (val === null || val === undefined) return '';
+  const s = String(val);
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function esc(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function fmt(v, digits=6) {
+  if (!Number.isFinite(v)) return '—';
+  if (Math.abs(v) >= 1e4 || (Math.abs(v) > 0 && Math.abs(v) < 1e-3)) return Number(v).toExponential(4);
+  return Number(v).toFixed(Math.max(0, Math.min(digits, 6)));
+}
+function sci(v) {
+  if (!Number.isFinite(v)) return '—';
+  const av = Math.abs(v);
+  if ((av >= 1e4) || (av > 0 && av < 1e-2)) return Number(v).toExponential(1);
+  return Number(v).toFixed(2).replace(/\.00$/, '');
+}
+
+window.addEventListener('resize', updatePlot);
+['areaValue','areaUnit','thicknessValue','thicknessUnit','useSubtractedForNorm'].forEach(id => {
+  document.addEventListener('change', e => { if (e.target && e.target.id === id) updateNormalization(); });
+});
+['leftMin','leftMax','rightMin','rightMax'].forEach(id => {
+  document.addEventListener('change', e => { if (e.target && e.target.id === id) updatePlot(); });
+});
+</script>
+</body>
+</html>
