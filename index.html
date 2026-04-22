@@ -142,7 +142,8 @@
     <button class="smg-tab" id="tab-btn-2" onclick="goTab(2)">2 — Columns</button>
     <button class="smg-tab" id="tab-btn-3" onclick="goTab(3)">3 — Background</button>
     <button class="smg-tab" id="tab-btn-4" onclick="goTab(4)">4 — Normalize</button>
-    <button class="smg-tab" id="tab-btn-5" onclick="goTab(5)">5 — Export</button>
+    <button class="smg-tab" id="tab-btn-5" onclick="goTab(5)">5 — Review</button>
+    <button class="smg-tab" id="tab-btn-6" onclick="goTab(6)">6 — Export</button>
   </div>
 </nav>
 
@@ -342,12 +343,32 @@
 
       <div class="btn-row">
         <button class="btn-ghost" onclick="goTab(3)">← Back</button>
-        <button class="btn-primary" onclick="goTab(5)">Next: Export →</button>
+        <button class="btn-primary" onclick="goTab(5)">Next: Review →</button>
       </div>
     </div>
   </div>
 
   <div class="tab-panel" id="tab5">
+    <div class="smg-card">
+      <div class="smg-card-title">Review Corrected Loop and Magnetic Metrics</div>
+      <p class="smg-card-desc">Review the normalized background-subtracted curve before export. The review plot marks the extracted coercive and saturation fields, and the metrics summary below reports the values used in the export.</p>
+
+      <div class="plot-wrap"><canvas id="reviewPlot" width="900" height="380"></canvas></div>
+      <p class="muted-note">Green curve: normalized background-subtracted moment. Dashed maroon lines: Hc− and Hc+. Dashed gold lines: Hsat− and Hsat+.</p>
+
+      <div class="smg-result-card" id="reviewMetricsCard">
+        <div class="smg-result-label">Review summary</div>
+        <div class="smg-kv"><span class="smg-kv-key">Status</span><span class="smg-kv-val">Apply background subtraction to populate review</span></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-ghost" onclick="goTab(4)">← Back</button>
+        <button class="btn-primary" onclick="goTab(6)">Next: Export →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab6">
     <div class="smg-card">
       <div class="smg-card-title">Export Processed Data</div>
       <p class="smg-card-desc">The export contains raw and corrected magnetic data, normalized magnetization, interpolated loop metrics, and geometry-derived quantities in both cgs/emu and SI units whenever geometry has been supplied.</p>
@@ -357,7 +378,7 @@
       <hr class="smg-hr">
       <div class="btn-row">
         <button class="btn-gold" onclick="exportProcessedCSV()">⬇ Download processed CSV</button>
-        <button class="btn-ghost" onclick="goTab(4)">← Back</button>
+        <button class="btn-ghost" onclick="goTab(5)">← Back</button>
       </div>
       <div id="exportSuccess" class="hidden" style="margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <span class="smg-badge-ok">✓ Downloaded</span>
@@ -423,10 +444,11 @@ function goTab(n) {
   if (n === 2) renderColumnOptions();
   if (n === 3) { seedFitWindows(); updatePlot(); renderFitSummary(); }
   if (n === 4) renderNormSummary();
-  if (n === 5) renderExportSummary();
+  if (n === 5) renderReviewStage();
+  if (n === 6) renderExportSummary();
 }
 function unlockTabs() {
-  ['tab-btn-2','tab-btn-3','tab-btn-4','tab-btn-5'].forEach(id => document.getElementById(id).classList.add('unlocked'));
+  ['tab-btn-2','tab-btn-3','tab-btn-4','tab-btn-5','tab-btn-6'].forEach(id => document.getElementById(id).classList.add('unlocked'));
 }
 function handleFileInput(input) { if (input.files && input.files[0]) processFile(input.files[0]); }
 
@@ -557,7 +579,7 @@ function resetTool() {
   document.getElementById('parseError').classList.add('hidden');
   document.getElementById('fileInput').value = '';
   document.getElementById('parseProgress').classList.remove('active');
-  ['tab-btn-2','tab-btn-3','tab-btn-4','tab-btn-5'].forEach(id => {
+  ['tab-btn-2','tab-btn-3','tab-btn-4','tab-btn-5','tab-btn-6'].forEach(id => {
     const b = document.getElementById(id); b.classList.remove('active','completed','unlocked');
   });
   document.getElementById('tab-btn-1').classList.add('active');
@@ -1053,6 +1075,150 @@ function convertThicknessToM(v, unit) {
 }
 
 
+
+function renderReviewStage() {
+  drawReviewPlot();
+  renderReviewMetricsCard();
+}
+
+function renderReviewMetricsCard() {
+  const card = document.getElementById('reviewMetricsCard');
+  if (!state.fit || !state.metrics) {
+    card.innerHTML = `<div class="smg-result-label">Review summary</div>
+      <div class="smg-kv"><span class="smg-kv-key">Status</span><span class="smg-kv-val">Apply background subtraction to populate review</span></div>`;
+    return;
+  }
+  const m = state.metrics;
+  const n = state.normalization || {};
+  const vol_cm3 = (n.area_cm2 && n.thickness_m) ? (n.area_cm2 * (n.thickness_m * 100)) : null;
+  const msMinusEmu = Number.isFinite(m.MsatMinus) ? convertMoment(m.MsatMinus, state.momentUnit, 'emu') : null;
+  const msPlusEmu = Number.isFinite(m.MsatPlus) ? convertMoment(m.MsatPlus, state.momentUnit, 'emu') : null;
+  const msMinusEmuCm3 = (vol_cm3 && Number.isFinite(msMinusEmu)) ? msMinusEmu / vol_cm3 : null;
+  const msPlusEmuCm3 = (vol_cm3 && Number.isFinite(msPlusEmu)) ? msPlusEmu / vol_cm3 : null;
+
+  card.innerHTML = `
+    <div class="smg-result-label">Review summary</div>
+    <div class="smg-kv"><span class="smg-kv-key">Hc− / Hc+</span><span class="smg-kv-val">${fmt(m.HcMinus,8)} / ${fmt(m.HcPlus,8)} ${esc(state.fieldUnit)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Hsat− / Hsat+</span><span class="smg-kv-val">${fmt(m.HsatMinus,8)} / ${fmt(m.HsatPlus,8)} ${esc(state.fieldUnit)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Mr− / Mr+</span><span class="smg-kv-val">${fmt(m.MrMinus,8)} / ${fmt(m.MrPlus,8)} ${esc(state.momentUnit)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Mr/Ms − / +</span><span class="smg-kv-val">${fmt(m.remFracMinus,6)} / ${fmt(m.remFracPlus,6)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Msat− / Msat+ (${esc(state.momentUnit)})</span><span class="smg-kv-val">${fmt(m.MsatMinus,8)} / ${fmt(m.MsatPlus,8)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Msat− / Msat+ (emu)</span><span class="smg-kv-val">${fmt(msMinusEmu,8)} / ${fmt(msPlusEmu,8)}</span></div>
+    ${vol_cm3 ? `<div class="smg-kv"><span class="smg-kv-key">Msat− / Msat+ (emu/cm³)</span><span class="smg-kv-val">${fmt(msMinusEmuCm3,8)} / ${fmt(msPlusEmuCm3,8)}</span></div>` : ''}
+    <div class="smg-kv"><span class="smg-kv-key">Normalization denominator</span><span class="smg-kv-val">${fmt(m.normDenominator,8)} ${esc(state.momentUnit)}</span></div>
+    <div class="smg-kv"><span class="smg-kv-key">Saturation threshold</span><span class="smg-kv-val">${fmt(m.satFraction,4)} × Msat</span></div>
+  `;
+}
+
+function drawReviewPlot() {
+  const canvas = document.getElementById('reviewPlot');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth || 900;
+  const cssHeight = canvas.clientHeight || 380;
+  if (canvas.width !== Math.round(cssWidth*dpr) || canvas.height !== Math.round(cssHeight*dpr)) {
+    canvas.width = Math.round(cssWidth*dpr); canvas.height = Math.round(cssHeight*dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0,0,cssWidth,cssHeight);
+
+  const margin = {l:58, r:20, t:18, b:42};
+  const W = cssWidth - margin.l - margin.r;
+  const H = cssHeight - margin.t - margin.b;
+
+  if (!state.fit || !state.metrics || !Number.isFinite(state.metrics.normDenominator) || state.metrics.normDenominator === 0) {
+    ctx.fillStyle = '#7a5a5c';
+    ctx.font = '14px "IBM Plex Sans", sans-serif';
+    ctx.fillText('Apply background subtraction to generate review plot.', margin.l, margin.t + 24);
+    return;
+  }
+
+  const normDen = state.metrics.normDenominator;
+  const data = state.fit.derived.map(p => ({x:p.x, y:(p.ySub / normDen)}));
+  const xs = data.map(p => p.x);
+  const ys = data.map(p => p.y).filter(v => Number.isFinite(v));
+  const xmin = Math.min(...xs), xmax = Math.max(...xs);
+  let ymin = Math.min(-1.1, ...ys), ymax = Math.max(1.1, ...ys);
+  if (ymin === ymax) { ymin -= 1; ymax += 1; }
+  const padx = (xmax - xmin || 1) * 0.04;
+  const x0 = xmin - padx, x1 = xmax + padx;
+  const y0 = ymin, y1 = ymax;
+  const X = x => margin.l + (x - x0) / (x1 - x0) * W;
+  const Y = y => margin.t + H - (y - y0) / (y1 - y0) * H;
+
+  ctx.strokeStyle = '#c7b8a4';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(margin.l, margin.t);
+  ctx.lineTo(margin.l, margin.t + H);
+  ctx.lineTo(margin.l + W, margin.t + H);
+  ctx.stroke();
+
+  drawTicks(ctx, x0, x1, X, margin.t+H, true);
+  drawTicks(ctx, y0, y1, Y, margin.l, false);
+
+  // zero line
+  ctx.save();
+  ctx.strokeStyle = 'rgba(122,90,92,0.35)';
+  ctx.setLineDash([4,4]);
+  ctx.beginPath();
+  ctx.moveTo(margin.l, Y(0));
+  ctx.lineTo(margin.l + W, Y(0));
+  ctx.stroke();
+  ctx.restore();
+
+  // normalized curve
+  drawSeries(ctx, data.map(p => [X(p.x), Y(p.y)]), '#2e7d32', 1.8);
+
+  // reference lines
+  const refs = [
+    {x: state.metrics.HcMinus, color:'#501214', label:'Hc−'},
+    {x: state.metrics.HcPlus, color:'#501214', label:'Hc+'},
+    {x: state.metrics.HsatMinus, color:'#6A5638', label:'Hsat−'},
+    {x: state.metrics.HsatPlus, color:'#6A5638', label:'Hsat+'},
+  ].filter(r => Number.isFinite(r.x));
+
+  refs.forEach((ref, idx) => {
+    const px = X(ref.x);
+    ctx.save();
+    ctx.strokeStyle = ref.color;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([6,4]);
+    ctx.beginPath();
+    ctx.moveTo(px, margin.t);
+    ctx.lineTo(px, margin.t + H);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = ref.color;
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    const tx = Math.min(Math.max(px + 4, margin.l + 4), margin.l + W - 52);
+    const ty = margin.t + 14 + idx * 14;
+    ctx.fillText(ref.label, tx, ty);
+    ctx.restore();
+  });
+
+  // labels
+  ctx.fillStyle = '#7a5a5c';
+  ctx.font = '12px "IBM Plex Sans", sans-serif';
+  ctx.fillText(`Field (${state.fieldUnit})`, margin.l + W/2 - 28, cssHeight - 10);
+  ctx.save();
+  ctx.translate(15, margin.t + H/2 + 52);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText('Normalized background-subtracted moment', 0, 0);
+  ctx.restore();
+
+  // legend
+  let lx = margin.l + 8, ly = margin.t + 8;
+  legendItem(ctx, lx, ly, '#2e7d32', 'Normalized corrected loop', []);
+  ly += 18;
+  legendItem(ctx, lx, ly, '#501214', 'Hc reference lines', [6,4]);
+  ly += 18;
+  legendItem(ctx, lx, ly, '#6A5638', 'Hsat reference lines', [6,4]);
+}
 function renderExportSummary() {
   const outName = state.baseName ? state.baseName + '_magnetic_analysis.csv' : 'processed_magnetic_analysis.csv';
   const n = state.normalization || {};
